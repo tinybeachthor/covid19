@@ -1,0 +1,30 @@
+---
+title: "covid19"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(lubridate)
+library(tidyverse)
+```
+
+## Covid-19
+
+Chaotic model for COVID-19 european data.
+
+### Get data
+
+Get data from [European Center for Disease Control (ECDC)](https://www.ecdc.europa.eu).
+
+```{r cars}
+data <- read.csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv", na.strings = "", fileEncoding = "UTF-8-BOM", stringsAsFactors = F)
+
+# construct "date_reported" <date> column
+data$date_reported <- mdy(paste0(data$month,"-",data$day,"-",data$year))
+
+head(data)
+```
+
+
