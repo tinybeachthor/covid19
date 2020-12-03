@@ -6,12 +6,19 @@ let
   my-rstudio = rstudioWrapper.override { packages = with rPackages; [
     curl
 
-    ggplot2
-    astsa
-    tseries
-    forecast
-    fGarch
+    # get data
+    lubridate
+    tidyverse
 
+    # phase space & chaos
+    latex2exp
+    nonlinearTseries
+
+    # plot
+    ggplot2
+    plot3D
+
+    # document output
     knitr
     rmarkdown
   ]; };
