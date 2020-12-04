@@ -6,17 +6,14 @@ let
   my-rstudio = rstudioWrapper.override { packages = with rPackages; [
     curl
 
-    # get data
-    lubridate
     tidyverse
+    lubridate
+
+    plot3D
 
     # phase space & chaos
     latex2exp
     nonlinearTseries
-
-    # plot
-    ggplot2
-    plot3D
 
     # document output
     knitr
