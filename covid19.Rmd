@@ -1,30 +1,84 @@
 ---
-title: "covid19"
+title: "COVID-19"
 output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(lubridate)
 library(tidyverse)
+library(lubridate)
 ```
 
-## Covid-19
+## COVID-19 chaos model
 
-Chaotic model for COVID-19 european data.
+Chaos model for COVID-19 european data.
 
 ### Get data
 
 Get data from [European Center for Disease Control (ECDC)](https://www.ecdc.europa.eu).
 
-```{r cars}
-data <- read.csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv", na.strings = "", fileEncoding = "UTF-8-BOM", stringsAsFactors = F)
+```{r}
+data <- read.csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv", 
+                 na.strings = "", 
+                 fileEncoding = "UTF-8-BOM", 
+                 stringsAsFactors = F)
 
 # construct "date_reported" <date> column
 data$date_reported <- mdy(paste0(data$month,"-",data$day,"-",data$year))
+```
 
-head(data)
+Isolate data from Europe, 
+from countries or territories with big populations (remove islands & small states)
+and select relevant columns only.
+
+```{r}
+eu <- data[data$continentExp == "Europe" & data$popData2019 >= 1000000,] %>%
+  select("date_reported", "cases", "deaths", "countriesAndTerritories", "popData2019")
+head(eu)
+```
+
+### Transform into timeseries
+
+Get cases and deaths logdiffs per country.
+
+```{r warning=FALSE}
+isValidLogDiff <- function(x) {
+  !is.nan(x) & is.finite(x) & x != 0
+}
+
+euLogDiff <- eu %>% 
+  arrange(date_reported) %>%
+  group_by(countriesAndTerritories) %>%
+  mutate(
+    cases_logdiff = (log(cases) - log(lag(cases))),
+    deaths_logdiff = log(deaths) - log(lag(deaths))) %>%
+  tail(-1) %>% filter(isValidLogDiff(cases_logdiff), isValidLogDiff(deaths_logdiff)) %>%
+  group_split()
+
+names(euLogDiff) = unique(eu$countriesAndTerritories)
+```
+
+### Plot Italy
+
+Plot raw timeseries.
+
+```{r}
+ggplot(euLogDiff$Italy %>% 
+         select(date_reported, cases, deaths) %>%
+         pivot_longer(-date_reported, names_to = "variable", values_to = "value"),
+       aes(date_reported, value, colour = variable)) +
+  geom_point()
+```
+
+Plot logdiff.
+
+```{r}
+ggplot(euLogDiff$Italy %>% 
+         select(date_reported, cases_logdiff, deaths_logdiff) %>%
+         pivot_longer(-date_reported, names_to = "variable", values_to = "value"),
+       aes(date_reported, value, colour = variable)) +
+  geom_point()
 ```
 
 
