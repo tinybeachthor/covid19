@@ -9,11 +9,18 @@ let
     tidyverse
     lubridate
 
-    plot3D
+    # timeseries
+    zoo
+    forecast
+    dsa
 
     # phase space & chaos
-    latex2exp
     nonlinearTseries
+
+    # fancy plots
+    plot3D
+    gganimate
+    magick
 
     # document output
     knitr
