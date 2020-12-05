@@ -8,6 +8,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(lubridate)
+library(nonlinearTseries)
+library(plot3D)
 ```
 
 ## COVID-19 chaos model
@@ -51,7 +53,9 @@ euLogDiff <- eu %>%
   arrange(date_reported) %>%
   group_by(countriesAndTerritories) %>%
   mutate(
-    cases_logdiff = (log(cases) - log(lag(cases))),
+    cases_growth = cases / lag(cases),
+    deaths_growth = deaths / lag(deaths),
+    cases_logdiff = log(cases) - log(lag(cases)),
     deaths_logdiff = log(deaths) - log(lag(deaths))) %>%
   tail(-1) %>% filter(isValidLogDiff(cases_logdiff), isValidLogDiff(deaths_logdiff)) %>%
   group_split()
@@ -81,4 +85,43 @@ ggplot(euLogDiff$Italy %>%
   geom_point()
 ```
 
+Plot growth factors.
 
+```{r}
+ggplot(euLogDiff$Italy %>% 
+         select(date_reported, cases_growth, deaths_growth) %>%
+         pivot_longer(-date_reported, names_to = "variable", values_to = "value"),
+       aes(date_reported, value, colour = variable)) +
+  geom_line()
+```
+
+### Reconstruct phase space
+
+Taken’s embedding theorem.
+
+```{r}
+ts <- euLogDiff$Italy$cases_growth
+
+par(mfrow = c(1, 2))
+# tau-delay estimation based on the autocorrelation function
+tau.acf = timeLag(ts, technique = "acf",
+                  lag.max = 100, do.plot = T)
+# tau-delay estimation based on the mutual information function
+tau.ami = timeLag(ts, technique = "ami", 
+                  lag.max = 100, do.plot = T)
+```
+
+```{r}
+emb.dim = estimateEmbeddingDim(ts, time.lag = tau.ami, max.embedding.dim = 15)
+```
+
+```{r}
+tak = buildTakens(ts, embedding.dim = emb.dim, time.lag = tau.ami)
+
+scatter3D(tak[,1], tak[,2], tak[,3],
+          col = "red", type="o",cex = 0.3)
+```
+
+```{r}
+pairs(tak[,1:emb.dim], col="red", pch=".", cex=0.1)
+```
