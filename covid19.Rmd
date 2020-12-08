@@ -161,14 +161,18 @@ emb.dim = estimateEmbeddingDim(ts, time.lag = tau.ami, max.embedding.dim = 15)
 ```{r}
 tak = buildTakens(ts, embedding.dim = emb.dim, time.lag = tau.ami)
 
-scatter3D(tak[,1], tak[,2], tak[,3],
-          col = "red", type="o",cex = 0.3)
+color.gradient <- function(x, colors=c("blue","red"), colsteps=100) {
+  return( colorRampPalette(colors) (colsteps) [ findInterval(x, seq(min(x),max(x), length.out=colsteps)) ] )
+}
+scatter3D(tak[,1], tak[,2], tak[,3], colvar = 1:NROW(tak),
+          col = color.gradient(1:NROW(tak), colsteps = NROW(tak)), type="o",cex = 0.3)
 ```
 
 ```{r animation, eval=FALSE, include=FALSE}
 anim <- ggplot(data.frame(tak)) +
   geom_path(aes(x = X1, y = X2, 
-                col = "red"), show.legend = FALSE) +
+                color = 1:nrow(tak)), show.legend = FALSE) +
+  scale_color_gradient(low = "blue", high = "red") +
   transition_reveal(1:nrow(tak))
 
 animate(anim, renderer = magick_renderer(), fps = 5)
