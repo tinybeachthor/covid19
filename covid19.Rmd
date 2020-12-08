@@ -132,16 +132,26 @@ ggplot(countryWeekly %>%
 
 Taken’s embedding theorem.
 
-```{r}
-ts <- euLogDiff$Italy$cases_growth
+_Use weekly sums to avoid weekend fluctuations._
 
+```{r}
+ts <- as.ts(zoo(countryWeekly$cases_growth, order.by = countryWeekly$week))
+ts <- na.contiguous(ts)
+
+dfa.analysis = dfa(time.series = ts, npoints = 30,
+                   window.size.range=c(3,20),
+                   do.plot=FALSE)
+ts.estimation = estimate(dfa.analysis, do.plot = TRUE,
+                          fit.col="blue",fit.lwd=2,fit.lty=2,
+                          main="Fitting DFA")
+```
+
+```{r}
 par(mfrow = c(1, 2))
 # tau-delay estimation based on the autocorrelation function
-tau.acf = timeLag(ts, technique = "acf",
-                  lag.max = 100, do.plot = T)
+tau.acf = timeLag(ts, technique = "acf", lag.max = 15, do.plot = T)
 # tau-delay estimation based on the mutual information function
-tau.ami = timeLag(ts, technique = "ami", 
-                  lag.max = 100, do.plot = T)
+tau.ami = timeLag(ts, technique = "ami", lag.max = 15, do.plot = T)
 ```
 
 ```{r}
@@ -155,6 +165,11 @@ scatter3D(tak[,1], tak[,2], tak[,3],
           col = "red", type="o",cex = 0.3)
 ```
 
-```{r}
-pairs(tak[,1:emb.dim], col="red", pch=".", cex=0.1)
+```{r animation, eval=FALSE, include=FALSE}
+anim <- ggplot(data.frame(tak)) +
+  geom_path(aes(x = X1, y = X2, 
+                col = "red"), show.legend = FALSE) +
+  transition_reveal(1:nrow(tak))
+
+animate(anim, renderer = magick_renderer(), fps = 5)
 ```
