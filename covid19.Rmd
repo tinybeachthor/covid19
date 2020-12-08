@@ -8,13 +8,15 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(lubridate)
+library(zoo)
 library(nonlinearTseries)
 library(plot3D)
+library(gganimate)
 ```
 
 ## COVID-19 chaos model
 
-Chaos model for COVID-19 european data.
+Chaos model for COVID-19 EU data.
 
 ### Get data
 
@@ -22,22 +24,21 @@ Get data from [European Center for Disease Control (ECDC)](https://www.ecdc.euro
 
 ```{r}
 data <- read.csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv", 
-                 na.strings = "", 
-                 fileEncoding = "UTF-8-BOM", 
-                 stringsAsFactors = F)
+                 na.strings = "", fileEncoding = "UTF-8-BOM", stringsAsFactors = F)
 
 # construct "date_reported" <date> column
 data$date_reported <- mdy(paste0(data$month,"-",data$day,"-",data$year))
 ```
 
-Isolate data from Europe, 
-from countries or territories with big populations (remove islands & small states)
+Isolate data from Europe,
+from countries with population at least a million,
 and select relevant columns only.
 
 ```{r}
-eu <- data[data$continentExp == "Europe" & data$popData2019 >= 1000000,] %>%
+eu <- data[data$continentExp == "Europe" & data$popData2019 > 1000000,] %>%
   select("date_reported", "cases", "deaths", "countriesAndTerritories", "popData2019")
-head(eu)
+
+glimpse(eu)
 ```
 
 ### Transform into timeseries
@@ -45,11 +46,11 @@ head(eu)
 Get cases and deaths logdiffs per country.
 
 ```{r warning=FALSE}
-isValidLogDiff <- function(x) {
+isValid <- function(x) {
   !is.nan(x) & is.finite(x) & x != 0
 }
 
-euLogDiff <- eu %>% 
+euClean <- eu %>% 
   arrange(date_reported) %>%
   group_by(countriesAndTerritories) %>%
   mutate(
@@ -57,43 +58,75 @@ euLogDiff <- eu %>%
     deaths_growth = deaths / lag(deaths),
     cases_logdiff = log(cases) - log(lag(cases)),
     deaths_logdiff = log(deaths) - log(lag(deaths))) %>%
-  tail(-1) %>% filter(isValidLogDiff(cases_logdiff), isValidLogDiff(deaths_logdiff)) %>%
+  tail(-1) %>% 
+  filter(isValid(cases_logdiff), 
+         isValid(deaths_logdiff),
+         isValid(cases_growth),
+         isValid(deaths_growth)) %>%
   group_split()
+names(euClean) = unique(eu$countriesAndTerritories)
 
-names(euLogDiff) = unique(eu$countriesAndTerritories)
+euWeeklyClean <- eu %>% 
+  arrange(date_reported) %>%
+  group_by(countriesAndTerritories, week = isoweek(date_reported)) %>%
+  summarize(cases = sum(cases), deaths = sum(deaths)) %>%
+  mutate(
+    cases_growth = cases / lag(cases),
+    deaths_growth = deaths / lag(deaths)) %>%
+  filter(isValid(cases_growth),
+         isValid(deaths_growth)) %>%
+  group_split()
+names(euWeeklyClean) = unique(eu$countriesAndTerritories)
+
 ```
 
-### Plot Italy
-
-Plot raw timeseries.
+Pick a country for further analysis.
 
 ```{r}
-ggplot(euLogDiff$Italy %>% 
+country <- euClean$Czechia
+countryWeekly <- euWeeklyClean$Czechia
+
+glimpse(country)
+```
+
+### Plot
+
+```{r eval=T, echo=F}
+par(mfrow = c(2, 1))
+
+ggplot(country %>% 
          select(date_reported, cases, deaths) %>%
          pivot_longer(-date_reported, names_to = "variable", values_to = "value"),
        aes(date_reported, value, colour = variable)) +
-  geom_point()
+  geom_point() +
+  ggtitle("raw timeseries")
+
+ggplot(countryWeekly %>%
+         select(week, cases, deaths) %>%
+         pivot_longer(-week, names_to = "variable", values_to = "value"),
+       aes(week, value, colour = variable)) +
+  geom_point() +
+  ggtitle("raw timeseries - weekly")
 ```
 
-Plot logdiff.
+```{r eval=T, echo=F}
+par(mfrow = c(2, 1))
 
-```{r}
-ggplot(euLogDiff$Italy %>% 
-         select(date_reported, cases_logdiff, deaths_logdiff) %>%
-         pivot_longer(-date_reported, names_to = "variable", values_to = "value"),
-       aes(date_reported, value, colour = variable)) +
-  geom_point()
-```
-
-Plot growth factors.
-
-```{r}
-ggplot(euLogDiff$Italy %>% 
+ggplot(country %>% 
          select(date_reported, cases_growth, deaths_growth) %>%
          pivot_longer(-date_reported, names_to = "variable", values_to = "value"),
        aes(date_reported, value, colour = variable)) +
-  geom_line()
+  geom_line() +
+  ggtitle("growth factors")
+
+ggplot(countryWeekly %>%
+         select(week, cases_growth, deaths_growth) %>%
+         pivot_longer(-week, names_to = "variable", values_to = "value"),
+       aes(week, value, colour = variable)) +
+  geom_line() +
+  ggtitle("growth factors - weekly")
 ```
+
 
 ### Reconstruct phase space
 
