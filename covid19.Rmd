@@ -25,9 +25,6 @@ Get data from [European Center for Disease Control (ECDC)](https://www.ecdc.euro
 ```{r}
 data <- read.csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv", 
                  na.strings = "", fileEncoding = "UTF-8-BOM", stringsAsFactors = F)
-
-# construct "date_reported" <date> column
-data$date_reported <- mdy(paste0(data$month,"-",data$day,"-",data$year))
 ```
 
 Isolate data from Europe,
@@ -36,7 +33,7 @@ and select relevant columns only.
 
 ```{r}
 eu <- data[data$continentExp == "Europe" & data$popData2019 > 1000000,] %>%
-  select("date_reported", "cases", "deaths", "countriesAndTerritories", "popData2019")
+  select("dateRep", "year_week", "cases_weekly", "deaths_weekly", "countriesAndTerritories", "popData2019")
 
 glimpse(eu)
 ```
@@ -50,29 +47,12 @@ isValid <- function(x) {
   !is.nan(x) & is.finite(x) & x != 0
 }
 
-euClean <- eu %>% 
-  arrange(date_reported) %>%
+euWeeklyClean <- eu %>% 
+  arrange(year_week) %>%
   group_by(countriesAndTerritories) %>%
   mutate(
-    cases_growth = cases / lag(cases),
-    deaths_growth = deaths / lag(deaths),
-    cases_logdiff = log(cases) - log(lag(cases)),
-    deaths_logdiff = log(deaths) - log(lag(deaths))) %>%
-  tail(-1) %>% 
-  filter(isValid(cases_logdiff), 
-         isValid(deaths_logdiff),
-         isValid(cases_growth),
-         isValid(deaths_growth)) %>%
-  group_split()
-names(euClean) = unique(eu$countriesAndTerritories)
-
-euWeeklyClean <- eu %>% 
-  arrange(date_reported) %>%
-  group_by(countriesAndTerritories, week = isoweek(date_reported)) %>%
-  summarize(cases = sum(cases), deaths = sum(deaths)) %>%
-  mutate(
-    cases_growth = cases / lag(cases),
-    deaths_growth = deaths / lag(deaths)) %>%
+    cases_growth = cases_weekly / lag(cases_weekly),
+    deaths_growth = deaths_weekly / lag(deaths_weekly)) %>%
   filter(isValid(cases_growth),
          isValid(deaths_growth)) %>%
   group_split()
@@ -83,47 +63,28 @@ names(euWeeklyClean) = unique(eu$countriesAndTerritories)
 Pick a country for further analysis.
 
 ```{r}
-country <- euClean$Czechia
 countryWeekly <- euWeeklyClean$Czechia
 
-glimpse(country)
+glimpse(countryWeekly)
 ```
 
 ### Plot
 
 ```{r eval=T, echo=F}
-par(mfrow = c(2, 1))
-
-ggplot(country %>% 
-         select(date_reported, cases, deaths) %>%
-         pivot_longer(-date_reported, names_to = "variable", values_to = "value"),
-       aes(date_reported, value, colour = variable)) +
-  geom_point() +
-  ggtitle("raw timeseries")
-
 ggplot(countryWeekly %>%
-         select(week, cases, deaths) %>%
-         pivot_longer(-week, names_to = "variable", values_to = "value"),
-       aes(week, value, colour = variable)) +
+         select(year_week, cases_weekly, deaths_weekly) %>%
+         pivot_longer(-year_week, names_to = "variable", values_to = "value"),
+       aes(year_week, value, colour = variable)) +
   geom_point() +
   ggtitle("raw timeseries - weekly")
 ```
 
 ```{r eval=T, echo=F}
-par(mfrow = c(2, 1))
-
-ggplot(country %>% 
-         select(date_reported, cases_growth, deaths_growth) %>%
-         pivot_longer(-date_reported, names_to = "variable", values_to = "value"),
-       aes(date_reported, value, colour = variable)) +
-  geom_line() +
-  ggtitle("growth factors")
-
 ggplot(countryWeekly %>%
-         select(week, cases_growth, deaths_growth) %>%
-         pivot_longer(-week, names_to = "variable", values_to = "value"),
-       aes(week, value, colour = variable)) +
-  geom_line() +
+         select(year_week, cases_growth, deaths_growth) %>%
+         pivot_longer(-year_week, names_to = "variable", values_to = "value"),
+       aes(year_week, value, colour = variable)) +
+  geom_point() +
   ggtitle("growth factors - weekly")
 ```
 
@@ -135,7 +96,7 @@ Taken’s embedding theorem.
 _Use weekly sums to avoid weekend fluctuations._
 
 ```{r}
-ts <- as.ts(zoo(countryWeekly$cases_growth, order.by = countryWeekly$week))
+ts <- as.ts(zoo(countryWeekly$cases_growth, order.by = countryWeekly$year_week))
 ts <- na.contiguous(ts)
 
 dfa.analysis = dfa(time.series = ts, npoints = 30,
@@ -149,9 +110,9 @@ ts.estimation = estimate(dfa.analysis, do.plot = TRUE,
 ```{r}
 par(mfrow = c(1, 2))
 # tau-delay estimation based on the autocorrelation function
-tau.acf = timeLag(ts, technique = "acf", lag.max = 15, do.plot = T)
+tau.acf = timeLag(ts, technique = "acf", lag.max = 30, do.plot = T)
 # tau-delay estimation based on the mutual information function
-tau.ami = timeLag(ts, technique = "ami", lag.max = 15, do.plot = T)
+tau.ami = timeLag(ts, technique = "ami", lag.max = 30, do.plot = T)
 ```
 
 ```{r}
